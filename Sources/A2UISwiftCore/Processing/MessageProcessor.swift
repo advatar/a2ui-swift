@@ -113,7 +113,7 @@ public final class MessageProcessor {
         let components = catalog.componentSchemas.reduce(into: [String: AnyCodable]()) { result, pair in
             result[pair.key] = makeInlineComponentSchema(
                 name: pair.key,
-                propertiesSchema: processRefs(pair.value.anyCodableSchema)
+                propertiesSchema: processRefs(pair.value)
             )
         }
 
@@ -121,13 +121,13 @@ public final class MessageProcessor {
             FunctionDefinition(
                 name: api.name,
                 description: api.description,
-                parameters: processRefs(api.parameters.anyCodableSchema),
+                parameters: processRefs(api.parameters),
                 returnType: api.returnType
             )
         }
 
         let theme = catalog.themeSchema
-            .map { processRefs($0.anyCodableSchema) }
+            .map { processRefs($0) }
             .flatMap { $0.dictionaryValue?["properties"]?.dictionaryValue }
 
         return InlineCatalog(

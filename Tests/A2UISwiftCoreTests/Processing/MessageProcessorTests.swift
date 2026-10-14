@@ -15,24 +15,8 @@
 @testable import A2UISwiftCore
 import Testing
 import Foundation
-import JSONSchema
-import JSONSchemaBuilder
 
 // MARK: - Helpers
-
-@Schemable
-@ObjectOptions(.additionalProperties { false })
-struct GeneratedChartProperties {
-    let title: String
-    let data: [Double]
-    let xAxisLabel: String
-
-    enum CodingKeys: String, CodingKey {
-        case title
-        case data
-        case xAxisLabel = "x_axis_label"
-    }
-}
 
 private func makeProcessor(
     catalogId: String = "test-catalog",
@@ -42,8 +26,8 @@ private func makeProcessor(
     return MessageProcessor(catalogs: [catalog], actionHandler: actionHandler)
 }
 
-private func makeSchema(_ json: String) throws -> Schema {
-    try Schema(instance: json)
+private func makeSchema(_ json: String) throws -> AnyCodable {
+    try JSONDecoder().decode(AnyCodable.self, from: Data(json.utf8))
 }
 
 private func createSurfaceMsg(
@@ -500,12 +484,14 @@ struct MessageProcessorTests {
         #expect(required.filter { $0 == .string("component") }.count == 1)
     }
 
-    @Test("getClientCapabilities accepts component schemas generated from Swift models")
+    @Test("getClientCapabilities accepts component schemas supplied as JSON")
     func getClientCapabilitiesIncludesGeneratedModelSchemas() throws {
         let catalog = Catalog(
             id: "custom-catalog",
             componentSchemas: [
-                "Chart": GeneratedChartProperties.schema.definition()
+                "Chart": try makeSchema(#"""
+                {"type":"object","properties":{"title":{"type":"string"},"data":{"type":"array","items":{"type":"number"}},"x_axis_label":{"type":"string"}},"required":["title","data","x_axis_label"]}
+                """#)
             ]
         )
         let processor = MessageProcessor(catalogs: [catalog])

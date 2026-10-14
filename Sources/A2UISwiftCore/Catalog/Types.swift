@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import Foundation
-import JSONSchema
 
 // MARK: - Catalog
 
@@ -22,13 +21,14 @@ import JSONSchema
 public struct CatalogFunctionApi {
     public let name: String
     public let description: String?
-    public let parameters: Schema
+    /// JSON Schema for the parameters, as JSON.
+    public let parameters: AnyCodable
     public let returnType: FunctionCallReturnType
 
     public init(
         name: String,
         description: String? = nil,
-        parameters: Schema,
+        parameters: AnyCodable,
         returnType: FunctionCallReturnType
     ) {
         self.name = name
@@ -48,7 +48,7 @@ public final class Catalog {
     public let componentNames: Set<String>
 
     /// JSON Schemas for component properties, keyed by component name.
-    public let componentSchemas: [String: Schema]
+    public let componentSchemas: [String: AnyCodable]
 
     /// Named function implementations, keyed by function name.
     public let functions: [String: FunctionInvoker]
@@ -57,7 +57,7 @@ public final class Catalog {
     public let functionApis: [CatalogFunctionApi]
 
     /// JSON Schema for theme parameters used by this catalog.
-    public let themeSchema: Schema?
+    public let themeSchema: AnyCodable?
 
     /// A ready-to-use FunctionInvoker that delegates to this catalog's registered functions.
     /// Mirrors WebCore `Catalog.invoker`.
@@ -74,10 +74,10 @@ public final class Catalog {
     public init(
         id: String,
         componentNames: Set<String> = [],
-        componentSchemas: [String: Schema] = [:],
+        componentSchemas: [String: AnyCodable] = [:],
         functions: [String: FunctionInvoker] = [:],
         functionApis: [CatalogFunctionApi] = [],
-        themeSchema: Schema? = nil
+        themeSchema: AnyCodable? = nil
     ) {
         self.id = id
         self.componentNames = componentNames.union(componentSchemas.keys)
