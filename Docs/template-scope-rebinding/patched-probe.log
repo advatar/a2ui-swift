@@ -1,0 +1,28 @@
+Source blob: 2d5fa39f6f4abc1a878253232922ff063c242954
+Swift version 6.2.1 (swift-6.2.1-RELEASE)
+Target: x86_64-unknown-linux-gnu
+-Onone
+PASS array_scope actual=["/south/0", "/south/1"]
+PASS migration_scope 
+PASS same_scope 
+PASS same_scope_parent_replacement 
+PASS round_trip 
+PASS dictionary_scope 
+PASS nested_scope 
+PASS parallel_scope_migration 
+PASS same_scope_property_refresh 
+RESULT checks=9 failures=0
+
+-O
+PASS array_scope actual=["/south/0", "/south/1"]
+PASS migration_scope 
+PASS same_scope 
+PASS same_scope_parent_replacement 
+PASS round_trip 
+PASS dictionary_scope 
+PASS nested_scope 
+PASS parallel_scope_migration 
+PASS same_scope_property_refresh 
+RESULT checks=9 failures=0
+
+EXPECTED pass outcome verified at both optimization levels; NOT Apple qualification.
