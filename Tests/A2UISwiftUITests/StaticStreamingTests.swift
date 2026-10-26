@@ -157,4 +157,15 @@ struct StaticStreamingTests {
         try send(vm, [text("b", "rebuilt")])
         #expect(vm.componentTree?.children.last?.instance.properties["text"] == .string("rebuilt"))
     }
+
+    @Test("clearing the public tree releases the node graph immediately")
+    func releasesClearedTree() throws {
+        let vm = try model()
+        try send(vm, [root(["a"]), text("a")])
+        weak var previous = vm.componentTree
+        vm.componentTree = nil
+        #expect(previous == nil, "the streaming index must not extend the rendered tree lifetime")
+        try send(vm, [text("a", "rebuilt")])
+        #expect(vm.componentTree?.children.first?.instance.properties["text"] == .string("rebuilt"))
+    }
 }

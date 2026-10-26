@@ -71,7 +71,7 @@ public final class SurfaceViewModel {
     /// another leaf arrives. Positions retain declared order for sparse/late arrivals.
     /// Other topologies continue through the full scoped-tree reconciliation below.
     private final class StaticLeafIndex {
-        let root: ComponentNode
+        weak var root: ComponentNode?
         let ordinals: [String: Int]
         var positions: [Int]
 
@@ -198,8 +198,8 @@ public final class SurfaceViewModel {
         try surface.dataModel.set(path, value: payload.value)
         // Flat static leaves resolve values reactively through DataContext/PathSlot;
         // no template expansion or child topology can change on this path.
-        if let index = staticLeafIndex, index.root === componentTree,
-           index.root.children.count == index.positions.count { return }
+        if let index = staticLeafIndex, let root = index.root, root === componentTree,
+           root.children.count == index.positions.count { return }
         // Re-resolve the component tree: data-driven list templates
         // (`children: { componentId, path }`) are expanded at build time against
         // the data model, so when a server `updateDataModel` arrives after
@@ -303,8 +303,8 @@ public final class SurfaceViewModel {
     /// Apply only proven flat leaf changes. Validate the complete batch before mutating
     /// the old tree, so a structural/type change can safely take the general fallback.
     private func updateStaticLeaves(_ updates: [RawComponent]) -> Bool {
-        guard let index = staticLeafIndex, index.root === componentTree,
-              index.root.children.count == index.positions.count,
+        guard let index = staticLeafIndex, let root = index.root, root === componentTree,
+              root.children.count == index.positions.count,
               !updates.contains(where: { $0.id == rootComponentId }) else { return false }
         var changed: [String] = []
         var seen = Set<String>()
@@ -313,7 +313,7 @@ public final class SurfaceViewModel {
             guard let instance = components[update.id], isStaticLeaf(instance.componentType) else { return false }
             let position = index.insertionIndex(for: ordinal)
             if position < index.positions.count, index.positions[position] == ordinal {
-                let existing = index.root.children[position]
+                let existing = root.children[position]
                 guard existing.id == update.id, existing.dataContextPath == "/",
                       isStaticLeaf(existing.type), existing.children.isEmpty else { return false }
             }
@@ -323,8 +323,8 @@ public final class SurfaceViewModel {
             guard let ordinal = index.ordinals[id], let instance = components[id] else { continue }
             let position = index.insertionIndex(for: ordinal)
             let present = position < index.positions.count && index.positions[position] == ordinal
-            if present, index.root.children[position].type == instance.componentType {
-                let node = index.root.children[position]
+            if present, root.children[position].type == instance.componentType {
+                let node = root.children[position]
                 if node.instance != instance { node.instance = instance }
                 if node.weight != instance.weight { node.weight = instance.weight }
                 if node.accessibility != instance.accessibility { node.accessibility = instance.accessibility }
@@ -334,11 +334,11 @@ public final class SurfaceViewModel {
                                          uiState: createDefaultUIState(for: instance.componentType),
                                          accessibility: instance.accessibility)
                 if present {
-                    let old = index.root.children[position].uiState
+                    let old = root.children[position].uiState
                     if let old, let fresh = node.uiState, type(of: old) == type(of: fresh) { node.uiState = old }
-                    index.root.children[position] = node
+                    root.children[position] = node
                 } else {
-                    index.root.children.insert(node, at: position)
+                    root.children.insert(node, at: position)
                     index.positions.insert(ordinal, at: position)
                 }
             }
