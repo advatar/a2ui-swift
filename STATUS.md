@@ -3,10 +3,11 @@
 Tracking: https://github.com/advatar/UniversalInteractionKit/issues/134; parent UniversalInteractionKit #125. Renderer issues are disabled.
 
 - [x] Retain exact e49880cb grouped-order baseline and CPU sample; noisy shared-host diagnostic happens to pass, so retain it and freeze counterbalanced old/new qualification before candidate timing.
-- [x] Nine focused native regressions pass: arrivals/order, batch/metadata/type replacement, data/state, root/duplicates/cycles, template/custom fallback, deletion, malformed props explicit reset and immediate node-graph release.
+- [x] Ten focused native regressions pass, including actual fast-path engagement and mixed batches: arrivals/order, batch/metadata/type replacement, data/state, root/duplicates/cycles, template/custom fallback, deletion, malformed props explicit reset and immediate node-graph release.
 - [x] Implement incremental flat static leaf arrivals/updates with declared ordering and full scoped rebuild elsewhere; qualification remains pending below.
-- [x] Full renderer Debug/Release: 435 tests each. A deliberate strong-reference mutation fails the new lifetime regression; the corrected weak index passes.
-- [ ] Run consumer suites; native 512/1024/4096 single/32 batches (3 repeats, original exponent <1.6), deterministic state and bounded admitted/refusal parity; hosted scope/callback regressions.
+- [x] Full final renderer Debug/Release: 525 tests each (176 XCTest + 349 Swift Testing; earlier summarizer omitted 89 XCTest cases). A deliberate strong-reference mutation fails the new lifetime regression; the corrected weak index passes.
+- [x] Initial source-bound consumer suites and Debug/Release timings pass; final engagement/mixed-batch regressions and truthful reporting are being verified.
+- [ ] Re-run final consumer suites; native 512/1024/4096 single/32 batches (3 repeats, original exponent <1.6), deterministic state and bounded admitted/refusal parity; hosted scope/callback regressions.
 - [ ] Recorded Claude Code review, exact-pin promotion and required CI.
 
 Admission remains capped at 256. Large raw-renderer timing is not admitted-surface, frame, physical/human or clinical qualification. #64 stays deferred.

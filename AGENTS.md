@@ -1,6 +1,6 @@
-# AGENTS.md
+# Agent working agreements
 
-Instructions for AI coding agents working in this repository. (Mirrors `CLAUDE.md` — keep the two in sync when editing either.)
+Instructions for AI coding agents working in this repository. (Keep `AGENTS.md` and `CLAUDE.md` in sync when editing either.)
 
 ## What this is
 

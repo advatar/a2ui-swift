@@ -53,6 +53,8 @@ public final class SurfaceViewModel {
     // MARK: - Public state
 
     /// The rendered component tree. Views use this to walk and render the hierarchy.
+    /// Treat derived nodes as read-only. After external node mutations, call
+    /// `rebuildComponentTree()` to restore the topology from protocol definitions.
     public var componentTree: ComponentNode?
 
     /// Theme styles parsed from `createSurface.theme`.
@@ -93,6 +95,9 @@ public final class SurfaceViewModel {
     }
 
     @ObservationIgnored private var staticLeafIndex: StaticLeafIndex?
+
+    /// Internal diagnostic: counts leaves actually applied by the incremental path.
+    @ObservationIgnored private(set) var incrementalLeafUpdateCount = 0
 
     // MARK: - Init
 
@@ -209,6 +214,7 @@ public final class SurfaceViewModel {
     }
 
     private func handleDeleteSurface() {
+        incrementalLeafUpdateCount = 0
         staticLeafIndex = nil
         rootComponentId = nil
         components.removeAll()
@@ -342,6 +348,7 @@ public final class SurfaceViewModel {
                     index.positions.insert(ordinal, at: position)
                 }
             }
+            incrementalLeafUpdateCount += 1
         }
         return true
     }

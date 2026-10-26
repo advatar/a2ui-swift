@@ -43,6 +43,7 @@ struct StaticStreamingTests {
                     try send(vm, [text(ids[index])])
                     present.insert(index)
                     #expect(vm.componentTree === parent)
+                    #expect(vm.incrementalLeafUpdateCount == present.count)
                     #expect(parent.children.map(\.id) == present.sorted().map { ids[$0] })
                     #expect(parent.children.allSatisfy { $0.dataContextPath == "/" })
                 }
@@ -103,6 +104,7 @@ struct StaticStreamingTests {
         #expect(vm.componentTree?.children.allSatisfy { $0.instance.properties["text"] == .string("both") } == true)
         try send(vm, [root(["root", "a"])])
         #expect(vm.componentTree?.children.map(\.id) == ["a"])
+        #expect(vm.incrementalLeafUpdateCount == 0, "structural batches must use the full rebuild")
     }
 
     @Test("template rebinding and late custom references remain visible after leaving the static path")
@@ -141,6 +143,7 @@ struct StaticStreamingTests {
         try send(vm, [invalid])
         try send(vm, [text("a")])
         #expect(vm.componentTree?.children.isEmpty == true)
+        #expect(vm.incrementalLeafUpdateCount == 0)
     }
 
     @Test("explicit tree reset or changed child count takes the rebuild path")
@@ -153,9 +156,27 @@ struct StaticStreamingTests {
         vm.componentTree = nil
         try send(vm, [text("a", "current")])
         #expect(vm.componentTree?.children.map(\.id) == ["a", "b"])
+        vm.componentTree?.children.reverse() // same-count external mutation needs explicit repair
         vm.rebuildComponentTree()
+        #expect(vm.componentTree?.children.map(\.id) == ["a", "b"])
         try send(vm, [text("b", "rebuilt")])
         #expect(vm.componentTree?.children.last?.instance.properties["text"] == .string("rebuilt"))
+    }
+
+    @Test("one batch combines sparse arrivals, updates and type replacement")
+    func mixedBatch() throws {
+        let vm = try model()
+        try send(vm, [root(["a", "b", "c", "d"]), text("b"), text("d")])
+        let parent = try #require(vm.componentTree)
+        let b = parent.children[0], d = parent.children[1]
+        try send(vm, [text("c"), text("b", "updated"),
+                      RawComponent(id: "d", component: "Icon", properties: ["name": .string("home")]), text("a")])
+        #expect(vm.incrementalLeafUpdateCount == 4)
+        #expect(parent.children.map(\.id) == ["a", "b", "c", "d"])
+        #expect(parent.children[1] === b)
+        #expect(b.instance.properties["text"] == .string("updated"))
+        #expect(parent.children[3] !== d)
+        #expect(parent.children[3].type == .Icon)
     }
 
     @Test("clearing the public tree releases the node graph immediately")
