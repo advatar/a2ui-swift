@@ -2,9 +2,9 @@
 
 Tracking: https://github.com/advatar/UniversalInteractionKit/issues/134; parent UniversalInteractionKit #125. Renderer issues are disabled.
 
-- [ ] Retain exact e49880cb streaming baseline and host/source identities.
-- [ ] Cover ordered/out-of-order/late leaves, replacement, data bindings, root changes and nested/template/custom fallback.
-- [ ] Optimize flat static Column/Row/List leaf updates without changing per-message tree state or scoped state migration; preserve full rebuild elsewhere.
+- [x] Retain exact e49880cb grouped-order baseline and CPU sample; noisy shared-host diagnostic happens to pass, so retain it and freeze counterbalanced old/new qualification before candidate timing.
+- [x] Eight focused native regressions pass: arrivals/order, batch/metadata/type replacement, data/state, root/duplicates/cycles, template/custom fallback, deletion, malformed props and explicit reset.
+- [x] Implement incremental flat static leaf arrivals/updates with declared ordering and full scoped rebuild elsewhere; qualification remains pending below.
 - [ ] Run Debug/Release renderer and consumer suites; native 512/1024/4096 single/32 batches (3 repeats, original exponent <1.6), deterministic state and bounded admitted/refusal parity; hosted scope/callback regressions.
 - [ ] Recorded Claude Code review, exact-pin promotion and required CI.
 

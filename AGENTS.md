@@ -106,7 +106,7 @@ Many comments in `A2UISwiftCore` reference the WebCore (TypeScript) reference re
 - **No hardcoded numerics** (spacing, radii, font sizes, colors) in component views — pull from `A2UIStyle`.
 - **No `AnyView`** — use generics or `@ViewBuilder`.
 - **No third-party dependencies** other than what's already in `Package.swift` (`swift-json-schema`).
-- **Read-only component views.** All mutation goes through `SurfaceModel` / `SurfaceViewModel`. UI-only state lives on `ComponentNode.uiState`, which survives tree rebuilds (keyed by node id) so `LazyVStack` recycling is safe.
+- **Read-only component views.** All mutation goes through `SurfaceModel` / `SurfaceViewModel`. UI-only state lives on `ComponentNode.uiState`, which survives tree rebuilds (keyed by node id plus resolved data context path) so `LazyVStack` recycling is safe.
 - **Locale-sensitive code** in `BasicCatalog/Functions` follows WebCore's locale selection; plural rule versions and numeric boundaries follow Foundation — see PR refs in commits like `feat: align locale support with WebCore PR #1427`.
 - **Don't extend `v_08`.** New features land in the v0.9 modules.
 - **Platform fallbacks** — when a control is unavailable on watchOS/tvOS, provide a functional fallback (e.g., wheel picker instead of segmented, +/− buttons instead of slider). Never render nothing.
@@ -118,3 +118,7 @@ Repo uses [Conventional Commits](https://www.conventionalcommits.org/) — `clif
 ## Tests
 
 Six test targets, one per module. Tests live in `Tests/<ModuleName>Tests/`. Use `XCTAssertEqual` (shows actual vs expected on failure) over `XCTAssert`. When mirroring a WebCore test, name the test method to match so the correspondence is obvious.
+
+## Incremental static streaming
+
+SurfaceViewModel indexes flat static Column/Row/List leaves for immediate incremental arrivals and leaf property updates. Preserve declared order, duplicate-batch last-write behavior and state identity. Invalid container properties, duplicate references, structural changes, nested/template/custom trees and lifecycle reset must retain the full scoped-rebuild fallback. Data-model updates may skip reconstruction only for the proven static-leaf topology. Keep the native ordering/fallback regressions and consumer streaming/refusal qualification current; do not infer drawing/device performance from raw model timing.

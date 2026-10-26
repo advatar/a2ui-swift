@@ -67,6 +67,33 @@ public final class SurfaceViewModel {
     private var rootComponentId: String?
     private static let defaultRootId = "root"
 
+    /// A static flat container does not need to rebuild every existing sibling when
+    /// another leaf arrives. Positions retain declared order for sparse/late arrivals.
+    /// Other topologies continue through the full scoped-tree reconciliation below.
+    private final class StaticLeafIndex {
+        let root: ComponentNode
+        let ordinals: [String: Int]
+        var positions: [Int]
+
+        init(root: ComponentNode, ordinals: [String: Int], positions: [Int]) {
+            self.root = root
+            self.ordinals = ordinals
+            self.positions = positions
+        }
+
+        func insertionIndex(for ordinal: Int) -> Int {
+            var low = 0
+            var high = positions.count
+            while low < high {
+                let middle = low + (high - low) / 2
+                if positions[middle] < ordinal { low = middle + 1 } else { high = middle }
+            }
+            return low
+        }
+    }
+
+    @ObservationIgnored private var staticLeafIndex: StaticLeafIndex?
+
     // MARK: - Init
 
     /// Creates a SurfaceViewModel backed by an existing SurfaceModel.
@@ -161,7 +188,7 @@ public final class SurfaceViewModel {
                 rootComponentId = Self.defaultRootId
             }
         }
-        rebuildComponentTree()
+        if !updateStaticLeaves(payload.components) { rebuildComponentTree() }
     }
 
     private func handleUpdateDataModel(_ payload: UpdateDataModelPayload) throws {
@@ -169,6 +196,10 @@ public final class SurfaceViewModel {
         // and SwiftUI views that read those slots re-render automatically.
         let path = payload.path ?? "/"
         try surface.dataModel.set(path, value: payload.value)
+        // Flat static leaves resolve values reactively through DataContext/PathSlot;
+        // no template expansion or child topology can change on this path.
+        if let index = staticLeafIndex, index.root === componentTree,
+           index.root.children.count == index.positions.count { return }
         // Re-resolve the component tree: data-driven list templates
         // (`children: { componentId, path }`) are expanded at build time against
         // the data model, so when a server `updateDataModel` arrives after
@@ -178,6 +209,7 @@ public final class SurfaceViewModel {
     }
 
     private func handleDeleteSurface() {
+        staticLeafIndex = nil
         rootComponentId = nil
         components.removeAll()
         a2uiStyle = A2UIStyle()
@@ -188,6 +220,8 @@ public final class SurfaceViewModel {
     // MARK: - Component Tree Building
 
     public func rebuildComponentTree() {
+        staticLeafIndex = nil
+        defer { indexStaticLeaves() }
         guard let rootId = rootComponentId else {
             // Per spec §179: if components exist but root is not yet defined,
             // report a validation error and render nothing.
@@ -226,6 +260,90 @@ public final class SurfaceViewModel {
         }
 
         componentTree = newTree
+    }
+
+    private func isStaticLeaf(_ type: ComponentType) -> Bool {
+        switch type {
+        case .Text, .Image, .Icon, .Video, .AudioPlayer, .Divider, .CheckBox,
+             .TextField, .DateTimeInput, .ChoicePicker, .Slider:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func indexStaticLeaves() {
+        guard let root = componentTree, let rootID = rootComponentId,
+              root.id == rootID, root.dataContextPath == "/",
+              let instance = components[rootID] else { return }
+        let children: ChildList?
+        switch instance.componentType {
+        case .Column: children = (try? instance.typedProperties(ColumnProperties.self))?.children
+        case .Row: children = (try? instance.typedProperties(RowProperties.self))?.children
+        case .List: children = (try? instance.typedProperties(ListProperties.self))?.children
+        default: return
+        }
+        guard case .staticList(let ids) = children,
+              !ids.contains(rootID), Set(ids).count == ids.count else { return }
+        var ordinals: [String: Int] = [:]
+        ordinals.reserveCapacity(ids.count)
+        for (ordinal, id) in ids.enumerated() {
+            if let child = components[id], !isStaticLeaf(child.componentType) { return }
+            ordinals[id] = ordinal
+        }
+        var positions: [Int] = []
+        for node in root.children {
+            guard let ordinal = ordinals[node.id], node.dataContextPath == "/",
+                  isStaticLeaf(node.type), node.children.isEmpty else { return }
+            positions.append(ordinal)
+        }
+        staticLeafIndex = StaticLeafIndex(root: root, ordinals: ordinals, positions: positions)
+    }
+
+    /// Apply only proven flat leaf changes. Validate the complete batch before mutating
+    /// the old tree, so a structural/type change can safely take the general fallback.
+    private func updateStaticLeaves(_ updates: [RawComponent]) -> Bool {
+        guard let index = staticLeafIndex, index.root === componentTree,
+              index.root.children.count == index.positions.count,
+              !updates.contains(where: { $0.id == rootComponentId }) else { return false }
+        var changed: [String] = []
+        var seen = Set<String>()
+        for update in updates where seen.insert(update.id).inserted {
+            guard let ordinal = index.ordinals[update.id] else { continue }
+            guard let instance = components[update.id], isStaticLeaf(instance.componentType) else { return false }
+            let position = index.insertionIndex(for: ordinal)
+            if position < index.positions.count, index.positions[position] == ordinal {
+                let existing = index.root.children[position]
+                guard existing.id == update.id, existing.dataContextPath == "/",
+                      isStaticLeaf(existing.type), existing.children.isEmpty else { return false }
+            }
+            changed.append(update.id)
+        }
+        for id in changed {
+            guard let ordinal = index.ordinals[id], let instance = components[id] else { continue }
+            let position = index.insertionIndex(for: ordinal)
+            let present = position < index.positions.count && index.positions[position] == ordinal
+            if present, index.root.children[position].type == instance.componentType {
+                let node = index.root.children[position]
+                if node.instance != instance { node.instance = instance }
+                if node.weight != instance.weight { node.weight = instance.weight }
+                if node.accessibility != instance.accessibility { node.accessibility = instance.accessibility }
+            } else {
+                let node = ComponentNode(id: id, baseComponentId: id, type: instance.componentType,
+                                         dataContextPath: "/", weight: instance.weight, instance: instance,
+                                         uiState: createDefaultUIState(for: instance.componentType),
+                                         accessibility: instance.accessibility)
+                if present {
+                    let old = index.root.children[position].uiState
+                    if let old, let fresh = node.uiState, type(of: old) == type(of: fresh) { node.uiState = old }
+                    index.root.children[position] = node
+                } else {
+                    index.root.children.insert(node, at: position)
+                    index.positions.insert(ordinal, at: position)
+                }
+            }
+        }
+        return true
     }
 
     private func buildNodeRecursive(

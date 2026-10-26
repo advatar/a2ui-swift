@@ -132,4 +132,29 @@ struct StaticStreamingTests {
         try send(vm, [root(["b"]), text("b")])
         #expect(vm.componentTree?.children.map(\.id) == ["b"])
     }
+
+    @Test("malformed container properties never gain children through incremental arrival")
+    func malformedContainer() throws {
+        let vm = try model()
+        var invalid = root(["a"])
+        invalid.properties["align"] = .number(42)
+        try send(vm, [invalid])
+        try send(vm, [text("a")])
+        #expect(vm.componentTree?.children.isEmpty == true)
+    }
+
+    @Test("explicit tree reset or changed child count takes the rebuild path")
+    func explicitTreeReset() throws {
+        let vm = try model()
+        try send(vm, [root(["a", "b"]), text("a"), text("b")])
+        vm.componentTree?.children.removeLast()
+        try send(vm, [text("b", "restored")])
+        #expect(vm.componentTree?.children.map(\.id) == ["a", "b"])
+        vm.componentTree = nil
+        try send(vm, [text("a", "current")])
+        #expect(vm.componentTree?.children.map(\.id) == ["a", "b"])
+        vm.rebuildComponentTree()
+        try send(vm, [text("b", "rebuilt")])
+        #expect(vm.componentTree?.children.last?.instance.properties["text"] == .string("rebuilt"))
+    }
 }
