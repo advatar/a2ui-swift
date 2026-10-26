@@ -1,0 +1,3 @@
+no-node-scope-check: CAUGHT by array_scope, round_trip, dictionary_scope, nested_scope (compiled; executed -Onone; -O not reached by fail-fast runner)
+unscoped-state-migration: CAUGHT by migration_scope, parallel_scope_migration (compiled; executed -Onone; -O not reached by fail-fast runner)
+wrong-source-pin: REFUSED before extraction/compilation

@@ -202,7 +202,7 @@ public final class SurfaceViewModel {
             return
         }
 
-        var oldStateMap: [String: any ComponentUIState] = [:]
+        var oldStateMap: [UIStateKey: any ComponentUIState] = [:]
         if let oldTree = componentTree {
             collectUIStates(from: oldTree, into: &oldStateMap)
         }
@@ -401,13 +401,16 @@ public final class SurfaceViewModel {
 
     /// Reconciles `existing` against `new` in place. Returns `true` when `existing`
     /// can be reused (caller keeps the same `componentTree` reference); `false` when
-    /// the root identity or type changed and the caller must replace the tree.
+    /// the root identity, type or resolved data scope changed and the caller must replace the tree.
     ///
     /// No-op writes to the `Equatable` `@Observable` fields below do not notify
     /// SwiftUI: the `@Observable` macro skips notification when the new value
     /// compares equal (requires a Swift 6.2+ / Xcode 26 toolchain).
     private func reconcileNode(existing: ComponentNode, new: ComponentNode) -> Bool {
-        guard existing.id == new.id, existing.type == new.type else { return false }
+        // Template positions can keep the same ID while rebinding to another collection.
+        // dataContextPath is immutable: reuse would retain the former action/data scope.
+        guard existing.id == new.id, existing.type == new.type,
+              existing.dataContextPath == new.dataContextPath else { return false }
         existing.instance = new.instance
         existing.weight = new.weight
         existing.accessibility = new.accessibility
@@ -417,7 +420,7 @@ public final class SurfaceViewModel {
     }
 
     /// O(n) keyed reconcile by `ComponentNode.id`. Reuses matched children (with
-    /// type check, Flutter-style), adopts new ones unchanged, drops removed ones.
+    /// type and data-scope checks), adopts new ones unchanged, drops removed ones.
     /// `existing.children` is only reassigned when node identity or order changed.
     private func reconcileChildren(existing: ComponentNode, newChildren: [ComponentNode]) {
         // `uniquingKeysWith` guards the (currently impossible) case of duplicate
@@ -444,13 +447,24 @@ public final class SurfaceViewModel {
 
     // MARK: - UI State
 
-    private func collectUIStates(from node: ComponentNode, into map: inout [String: any ComponentUIState]) {
-        if let state = node.uiState { map[node.id] = state }
+    /// A positional component ID alone must not transfer local state between entities.
+    private struct UIStateKey: Hashable {
+        let id: String
+        let dataContextPath: String
+
+        init(_ node: ComponentNode) {
+            id = node.id
+            dataContextPath = node.dataContextPath
+        }
+    }
+
+    private func collectUIStates(from node: ComponentNode, into map: inout [UIStateKey: any ComponentUIState]) {
+        if let state = node.uiState { map[UIStateKey(node)] = state }
         for child in node.children { collectUIStates(from: child, into: &map) }
     }
 
-    private func migrateUIStates(node: ComponentNode, from map: [String: any ComponentUIState]) {
-        if let old = map[node.id], let new = node.uiState, type(of: old) == type(of: new) {
+    private func migrateUIStates(node: ComponentNode, from map: [UIStateKey: any ComponentUIState]) {
+        if let old = map[UIStateKey(node)], let new = node.uiState, type(of: old) == type(of: new) {
             node.uiState = old
         }
         for child in node.children { migrateUIStates(node: child, from: map) }
