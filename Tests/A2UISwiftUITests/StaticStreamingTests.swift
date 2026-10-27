@@ -189,4 +189,91 @@ struct StaticStreamingTests {
         try send(vm, [text("a", "rebuilt")])
         #expect(vm.componentTree?.children.first?.instance.properties["text"] == .string("rebuilt"))
     }
+    private func button(_ id: String = "review", child: String = "caption", event: String = "preview") -> RawComponent {
+        RawComponent(id: id, component: "Button", properties: ["child": .string(child),
+                     "action": .dictionary(["event": .dictionary(["name": .string(event)])])])
+    }
+
+    @Test("static sibling arrivals preserve a complete terminal button and its caption")
+    func terminalButtonSiblings() throws {
+        for kind in ["Column", "Row", "List"] {
+            let vm = try model(), ids = (0..<16).map { "leaf\($0)" }
+            try send(vm, [root(["review"] + ids, type: kind), button(), RawComponent(id: "caption", component: "Text", properties: ["text": .dictionary(["path": .string("/caption")])])])
+            let parent = try #require(vm.componentTree), control = parent.children[0], caption = control.children[0]
+            let initial = vm.incrementalLeafUpdateCount
+            for index in (0..<16).reversed() {
+                try send(vm, [text(ids[index])])
+                #expect(parent.children[0] === control)
+                #expect(control.children[0] === caption)
+                #expect(parent.children.map(\.id) == ["review"] + Array(ids[index...]))
+            }
+            #expect(vm.incrementalLeafUpdateCount == initial + ids.count)
+            try vm.processMessage(.updateDataModel(.init(surfaceId: surfaceID, path: "/caption", value: .string("new"))))
+            #expect(vm.componentTree === parent)
+            #expect(control.children[0] === caption)
+            let properties = try caption.typedProperties(TextProperties.self)
+            #expect(vm.makeDataContext().resolve(properties.text) == "new")
+        }
+    }
+
+    @Test("button and caption updates, including late replacement captions, rebuild immediately")
+    func protectedButtonUpdates() throws {
+        let vm = try model()
+        try send(vm, [root(["review", "late"]), button()])
+        try send(vm, [text("late")])
+        #expect(vm.incrementalLeafUpdateCount == 0, "missing caption cannot engage static indexing")
+        try send(vm, [text("caption", "first")])
+        try send(vm, [text("late", "incremental")])
+        #expect(vm.incrementalLeafUpdateCount == 1)
+        try send(vm, [text("caption", "changed")])
+        #expect(vm.componentTree?.children[0].children[0].instance.properties["text"] == .string("changed"))
+        #expect(vm.incrementalLeafUpdateCount == 1)
+        try send(vm, [button(event: "different-event")])
+        let renderedButton = try #require(vm.componentTree?.children[0])
+        let action = try renderedButton.typedProperties(ButtonProperties.self).action
+        if case .event(let name, _) = action { #expect(name == "different-event") }
+        else { Issue.record("button event was not replaced") }
+        try send(vm, [button(child: "next-caption")])
+        #expect(vm.componentTree?.children[0].children.isEmpty == true)
+        try send(vm, [text("next-caption", "arrived")])
+        #expect(vm.componentTree?.children[0].children[0].id == "next-caption")
+        try send(vm, [text("late", "incremental again")])
+        #expect(vm.incrementalLeafUpdateCount == 2)
+        try send(vm, [text("caption", "unreferenced")])
+        #expect(vm.componentTree?.children[0].children[0].id == "next-caption")
+    }
+
+    @Test("shared, nested or root-listed button captions keep full-tree semantics")
+    func unsupportedButtonCaptions() throws {
+        for shape in ["shared", "nested", "root-listed", "icon"] {
+            let vm = try model()
+            var parts = [root(["review", "late"] + (shape == "shared" ? ["second"] : shape == "root-listed" ? ["caption"] : [])), button(), text("caption")]
+            if shape == "shared" { parts.append(button("second")) }
+            if shape == "nested" {
+                parts[2] = RawComponent(id: "caption", component: "Column", properties: ["children": .array([.string("inner")])])
+                parts.append(text("inner"))
+            }
+            if shape == "icon" { parts[2] = RawComponent(id: "caption", component: "Icon", properties: ["name": .string("home")]) }
+            try send(vm, parts)
+            try send(vm, [text("late")])
+            #expect(vm.incrementalLeafUpdateCount == 0)
+            #expect(vm.componentTree?.children[0].children[0].id == "caption")
+            try send(vm, [text("caption", "new leaf")])
+            #expect(vm.componentTree?.children[0].children[0].instance.properties["text"] == .string("new leaf"))
+        }
+    }
+
+    @Test("terminal controls do not extend a cleared tree lifetime")
+    func terminalButtonLifetime() throws {
+        let vm = try model()
+        try send(vm, [root(["review"]), button(), text("caption")])
+        weak var previous = vm.componentTree
+        weak var control = vm.componentTree?.children.first
+        weak var caption = control?.children.first
+        vm.componentTree = nil
+        #expect(previous == nil)
+        #expect(control == nil)
+        #expect(caption == nil)
+    }
+
 }

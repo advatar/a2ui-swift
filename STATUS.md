@@ -1,3 +1,12 @@
+# Static form sibling qualification — 2026-10-27 (#125/#88/#136)
+
+- [x] Retain old native admission36-case baseline: actionable4096 single updates hit60-second deadline three times; batch32 completes about3seconds. Existing flat-leaf index refuses a Button caption subtree, causing a full renderer rebuild per sibling.
+- [x] Extend only static root leaf indexing around a fully resolved, unchanged terminal Button/primitive-caption pair; protect Button/caption updates with full rebuild and reject shared/nested/incomplete captions.
+- [x] Fourteen focused engagement/fallback/action/data/lifetime regressions pass; removing Button eligibility deliberately fails the engagement regression. Full renderer Debug/Release529 each pass.
+- [ ] Exact remote consumer pin, exact remote consumer pin, admitted/performance reruns, recorded review and required protected checks.
+
+No protocol, authority or admission ceiling change. Consumer production cap remains256; #64 physical pilot stays deferred. Native input/frame qualification remains pending under #136.
+
 # Native streaming optimization — 2026-10-26
 
 Tracking: https://github.com/advatar/UniversalInteractionKit/issues/134; parent UniversalInteractionKit #125. Renderer issues are disabled.
