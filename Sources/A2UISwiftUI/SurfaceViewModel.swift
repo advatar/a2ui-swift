@@ -69,18 +69,22 @@ public final class SurfaceViewModel {
     private var rootComponentId: String?
     private static let defaultRootId = "root"
 
-    /// A static flat container does not need to rebuild every existing sibling when
-    /// another leaf arrives. Positions retain declared order for sparse/late arrivals.
+    /// A static container of leaves and resolved terminal Button/Text pairs does not
+    /// need to rebuild every existing sibling when another leaf arrives. Positions retain declared order for sparse/late arrivals.
     /// Other topologies continue through the full scoped-tree reconciliation below.
     private final class StaticLeafIndex {
         weak var root: ComponentNode?
         let ordinals: [String: Int]
         var positions: [Int]
+        /// Fully resolved terminal controls stay untouched while other leaves arrive.
+        /// Any update to the control or its caption takes the general rebuild path.
+        let protectedIDs: Set<String>
 
-        init(root: ComponentNode, ordinals: [String: Int], positions: [Int]) {
+        init(root: ComponentNode, ordinals: [String: Int], positions: [Int], protectedIDs: Set<String>) {
             self.root = root
             self.ordinals = ordinals
             self.positions = positions
+            self.protectedIDs = protectedIDs
         }
 
         func insertionIndex(for ordinal: Int) -> Int {
@@ -201,7 +205,7 @@ public final class SurfaceViewModel {
         // and SwiftUI views that read those slots re-render automatically.
         let path = payload.path ?? "/"
         try surface.dataModel.set(path, value: payload.value)
-        // Flat static leaves resolve values reactively through DataContext/PathSlot;
+        // Indexed static leaves/captions resolve values through DataContext/PathSlot;
         // no template expansion or child topology can change on this path.
         if let index = staticLeafIndex, let root = index.root, root === componentTree,
            root.children.count == index.positions.count { return }
@@ -294,24 +298,37 @@ public final class SurfaceViewModel {
         var ordinals: [String: Int] = [:]
         ordinals.reserveCapacity(ids.count)
         for (ordinal, id) in ids.enumerated() {
-            if let child = components[id], !isStaticLeaf(child.componentType) { return }
+            if let child = components[id], !isStaticLeaf(child.componentType), child.componentType != .Button { return }
             ordinals[id] = ordinal
         }
         var positions: [Int] = []
+        var protectedIDs = Set<String>()
         for node in root.children {
-            guard let ordinal = ordinals[node.id], node.dataContextPath == "/",
-                  isStaticLeaf(node.type), node.children.isEmpty else { return }
+            guard let ordinal = ordinals[node.id], node.dataContextPath == "/" else { return }
+            if isStaticLeaf(node.type) {
+                guard node.children.isEmpty else { return }
+            } else {
+                // Only a fully resolved terminal Button is stable here. Its caption
+                // cannot also be a root child or another Button's shared caption.
+                guard node.type == .Button, node.children.count == 1,
+                      let properties = try? node.instance.typedProperties(ButtonProperties.self),
+                      let caption = node.children.first, caption.id == properties.child,
+                      caption.dataContextPath == "/", caption.type == .Text, caption.children.isEmpty,
+                      ordinals[caption.id] == nil, protectedIDs.insert(caption.id).inserted else { return }
+                protectedIDs.insert(node.id)
+            }
             positions.append(ordinal)
         }
-        staticLeafIndex = StaticLeafIndex(root: root, ordinals: ordinals, positions: positions)
+        staticLeafIndex = StaticLeafIndex(root: root, ordinals: ordinals, positions: positions, protectedIDs: protectedIDs)
     }
 
-    /// Apply only proven flat leaf changes. Validate the complete batch before mutating
+    /// Apply only proven leaf changes; protected terminal controls always rebuild.
+    /// Validate the complete batch before mutating
     /// the old tree, so a structural/type change can safely take the general fallback.
     private func updateStaticLeaves(_ updates: [RawComponent]) -> Bool {
         guard let index = staticLeafIndex, let root = index.root, root === componentTree,
               root.children.count == index.positions.count,
-              !updates.contains(where: { $0.id == rootComponentId }) else { return false }
+              !updates.contains(where: { $0.id == rootComponentId || index.protectedIDs.contains($0.id) }) else { return false }
         var changed: [String] = []
         var seen = Set<String>()
         for update in updates where seen.insert(update.id).inserted {
