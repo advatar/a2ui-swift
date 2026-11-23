@@ -265,6 +265,8 @@ public final class ExpressionParser {
         case .number(let n): return .number(n)
         case .bool(let b):   return .bool(b)
         case .array(let a):  return .array(a)
+        case .object(let members):
+            return .dictionary(members.mapValues { dynamicValueToAnyCodable($0) })
         case .dataBinding(let path):
             return .dictionary(["path": .string(path)])
         case .functionCall(let fc):

@@ -152,6 +152,9 @@ public final class DataContext {
         case .number(let n): return .number(n)
         case .bool(let b): return .bool(b)
         case .array(let a): return .array(a)
+        case .object(let members):
+            // Resolve each member; an unset nested binding keeps its key as null.
+            return .dictionary(members.mapValues { resolveDynamicValue($0) ?? .null })
         case .dataBinding(let pathStr):
             // Read PathSlot.value (@Observable) so SwiftUI builds a per-path dependency.
             // Only views whose specific path changes will re-render.
