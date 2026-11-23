@@ -153,8 +153,8 @@ public final class DataContext {
         case .bool(let b): return .bool(b)
         case .array(let a): return .array(a)
         case .object(let members):
-            // Resolve each member; an unset nested binding keeps its key as null.
-            return .dictionary(members.mapValues { resolveDynamicValue($0) ?? .null })
+            // Resolve each member; a null member or unset binding keeps its key as null.
+            return .dictionary(members.mapValues { $0.flatMap(resolveDynamicValue) ?? .null })
         case .dataBinding(let pathStr):
             // Read PathSlot.value (@Observable) so SwiftUI builds a per-path dependency.
             // Only views whose specific path changes will re-render.
@@ -273,7 +273,7 @@ public final class DataContext {
             }
 
         default:
-            // Literals and function calls: evaluate once, no reactive updates.
+            // Literals, function calls and objects: evaluate once, no reactive updates.
             let currentValue = resolveDynamicValue(value)
             return DataSubscription<AnyCodable>(initialValue: currentValue, unsubscribe: {})
         }

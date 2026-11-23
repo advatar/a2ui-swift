@@ -156,9 +156,10 @@ public enum DynamicValue: Codable, Sendable {
     /// A plain JSON object that is neither a binding (`path`) nor a function
     /// call (`call`), such as an event context's `"params": {}`. Each member is
     /// itself a `DynamicValue`, so bindings nested inside it are resolved when
-    /// the action is resolved. This is an extension beyond the v0.9 schema,
-    /// matching renderers that resolve context objects recursively.
-    case object([String: DynamicValue])
+    /// the action is resolved; a JSON `null` member is kept as `nil`. This is an
+    /// extension beyond the v0.9 schema, matching renderers that resolve
+    /// context objects recursively.
+    case object([String: DynamicValue?])
 
     public init(from decoder: Decoder) throws {
         let raw = try AnyCodable(from: decoder)
@@ -178,7 +179,10 @@ public enum DynamicValue: Codable, Sendable {
                 case .functionCall(let fc): self = .functionCall(fc)
                 }
             } else {
-                self = .object(dict.mapValues { DynamicValue(from: $0) })
+                self = .object(dict.mapValues { member -> DynamicValue? in
+                    if case .null = member { return nil }
+                    return DynamicValue(from: member)
+                })
             }
         case .null:
             assertionFailure("A2UI: DynamicValue received null, falling back to empty string.")

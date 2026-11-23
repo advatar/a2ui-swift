@@ -72,7 +72,7 @@ private func a2ui_collectPaths(
             a2ui_collectPaths(DynamicValue(from: arg), dataContext: dc, into: &paths)
         }
     case .object(let members):
-        for (_, member) in members {
+        for case let member? in members.values {
             a2ui_collectPaths(member, dataContext: dc, into: &paths)
         }
     default:

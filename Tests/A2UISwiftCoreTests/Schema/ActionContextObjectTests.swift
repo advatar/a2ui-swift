@@ -38,18 +38,17 @@ struct ActionContextObjectTests {
         }
     }
 
-    @Test("the non-throwing AnyCodable initializer matches the Decodable one")
+    @Test("the non-throwing AnyCodable initializer resolves the same as the Decodable one")
     func anyCodableInitializerMatches() throws {
         let raw = try JSONDecoder().decode(AnyCodable.self, from: Data(pagingParams.utf8))
-        let action = Action(from: raw)
-        guard case .object(let params)? = context(action)["params"] else {
-            Issue.record("params did not decode as an object")
+        let viaAnyCodable = Action(from: raw)
+        guard case .object(let params)? = context(viaAnyCodable)["params"],
+              case .dataBinding(path: "/catalog/query")?? = params["query"] else {
+            Issue.record("params did not decode as an object with a nested binding")
             return
         }
-        guard case .dataBinding(path: "/catalog/query")? = params["query"] else {
-            Issue.record("nested binding was \(String(describing: params["query"]))")
-            return
-        }
+        let ctx = createTestDataContext(data: ["catalog": .dictionary(["query": .string("x")])], path: "/")
+        #expect(ctx.resolveAction(viaAnyCodable) == ctx.resolveAction(try decodeAction(pagingParams)))
     }
 
     @Test("resolves bindings nested inside an object when the action is resolved")
@@ -71,6 +70,48 @@ struct ActionContextObjectTests {
         let ctx = createTestDataContext(data: [:], path: "/")
         #expect(ctx.resolveDynamicValue(.object(["query": .dataBinding(path: "/missing")]))
                 == .dictionary(["query": .null]))
+    }
+
+    @Test("a null member stays null through decoding, resolution and encoding")
+    func nullMemberIsPreserved() throws {
+        let json = #"{"event":{"name":"resolve_intent","context":{"intent":"patient_registry","params":{"subject_id":null,"offset":0}}}}"#
+        let action = try decodeAction(json)
+        let ctx = createTestDataContext(data: [:], path: "/")
+        guard case .dictionary(let root) = ctx.resolveAction(action),
+              case .dictionary(let event)? = root["event"],
+              case .dictionary(let values)? = event["context"] else {
+            Issue.record("unexpected shape")
+            return
+        }
+        #expect(values["params"] == .dictionary(["subject_id": .null, "offset": .number(0)]))
+        let reencoded = try JSONDecoder().decode(AnyCodable.self, from: try JSONEncoder().encode(action))
+        #expect(reencoded == (try JSONDecoder().decode(AnyCodable.self, from: Data(json.utf8))))
+    }
+
+    @Test("bindings two objects deep resolve")
+    func deeplyNestedBindingsResolve() throws {
+        let json = #"{"event":{"name":"e","context":{"params":{"filter":{"name":{"path":"/name"},"page":2}}}}}"#
+        let ctx = createTestDataContext(data: ["name": .string("Ada")], path: "/")
+        guard case .dictionary(let root) = ctx.resolveAction(try decodeAction(json)),
+              case .dictionary(let event)? = root["event"],
+              case .dictionary(let values)? = event["context"] else {
+            Issue.record("unexpected shape")
+            return
+        }
+        #expect(values["params"] == .dictionary(["filter": .dictionary(["name": .string("Ada"), "page": .number(2)])]))
+    }
+
+    @Test("arrays inside an object stay literal, as arrays do elsewhere")
+    func arraysInsideObjectsStayLiteral() throws {
+        let json = #"{"event":{"name":"e","context":{"params":{"ids":["a","b"]}}}}"#
+        let ctx = createTestDataContext(data: [:], path: "/")
+        guard case .dictionary(let root) = ctx.resolveAction(try decodeAction(json)),
+              case .dictionary(let event)? = root["event"],
+              case .dictionary(let values)? = event["context"] else {
+            Issue.record("unexpected shape")
+            return
+        }
+        #expect(values["params"] == .dictionary(["ids": .array([.string("a"), .string("b")])]))
     }
 
     @Test("an empty object resolves to an empty object")
