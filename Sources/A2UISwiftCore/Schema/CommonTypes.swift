@@ -145,7 +145,7 @@ enum DynamicDictResolver {
 
 /// A generic dynamic value: any literal | DataBinding | FunctionCall.
 /// Not suitable for the generic form because it supports multiple literal types, so it stays as a separate enum.
-/// Mirrors WebCore `DynamicValueSchema`.
+/// Mirrors WebCore `DynamicValueSchema`, plus `object` (see below).
 public enum DynamicValue: Codable, Sendable {
     case string(String)
     case number(Double)
@@ -153,6 +153,13 @@ public enum DynamicValue: Codable, Sendable {
     case array([AnyCodable])
     case dataBinding(path: String)
     case functionCall(FunctionCall)
+    /// A plain JSON object that is neither a binding (`path`) nor a function
+    /// call (`call`), such as an event context's `"params": {}`. Each member is
+    /// itself a `DynamicValue`, so bindings nested inside it are resolved when
+    /// the action is resolved; a JSON `null` member is kept as `nil`. This is an
+    /// extension beyond the v0.9 schema, matching renderers that resolve
+    /// context objects recursively.
+    case object([String: DynamicValue?])
 
     public init(from decoder: Decoder) throws {
         let raw = try AnyCodable(from: decoder)
@@ -172,8 +179,10 @@ public enum DynamicValue: Codable, Sendable {
                 case .functionCall(let fc): self = .functionCall(fc)
                 }
             } else {
-                assertionFailure("A2UI: DynamicValue received unresolvable object: \(dict)")
-                self = .string("")
+                self = .object(dict.mapValues { member -> DynamicValue? in
+                    if case .null = member { return nil }
+                    return DynamicValue(from: member)
+                })
             }
         case .null:
             assertionFailure("A2UI: DynamicValue received null, falling back to empty string.")
@@ -190,6 +199,7 @@ public enum DynamicValue: Codable, Sendable {
         case .array(let arr): try container.encode(arr)
         case .dataBinding(let path): try container.encode(["path": path])
         case .functionCall(let fc): try container.encode(fc)
+        case .object(let members): try container.encode(members)
         }
     }
 }
